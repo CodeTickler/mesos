@@ -145,7 +145,7 @@ function logged {
   local tag="${1##*/}[$$]"
   exec 1> >(exec logger -p user.info -t "$tag")
   exec 2> >(exec logger -p user.err  -t "$tag")
-  exec "$@"
+  exec $@
 }
 
 function msg { out "$*" >&2 ;}
