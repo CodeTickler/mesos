@@ -39,3 +39,9 @@ WORKDIR /opt/build
 
 # build and cleanup in a single layer
 RUN make -j4 install && cd / && rm -rf /opt
+
+# copy mesos init wrapper
+COPY mesos-init-wrapper /usr/bin/
+
+# remove locales warning when running mesos wrapper
+RUN sudo locale-gen en_US en_US.UTF-8 ; dpkg-reconfigure locales
