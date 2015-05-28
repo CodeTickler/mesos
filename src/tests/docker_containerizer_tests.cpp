@@ -937,8 +937,10 @@ TEST_F(DockerContainerizerTest, ROOT_DOCKER_Usage)
     waited += Milliseconds(200);
   } while (waited < Seconds(3));
 
-  EXPECT_EQ(2, statistics.cpus_limit());
-  EXPECT_EQ(Gigabytes(1).bytes(), statistics.mem_limit_bytes());
+  // Usage includes the executor resources.
+  EXPECT_EQ(2.0 + slave::DEFAULT_EXECUTOR_CPUS, statistics.cpus_limit());
+  EXPECT_EQ((Gigabytes(1) + slave::DEFAULT_EXECUTOR_MEM).bytes(),
+            statistics.mem_limit_bytes());
   EXPECT_LT(0, statistics.cpus_user_time_secs());
   EXPECT_LT(0, statistics.cpus_system_time_secs());
 
@@ -1240,6 +1242,58 @@ TEST_F(DockerContainerizerTest, DISABLED_ROOT_DOCKER_Recover)
   AWAIT_READY(reaped.get().status());
 
   Shutdown();
+}
+
+
+// This test checks the docker containerizer doesn't recover executors
+// that were started by another containerizer (e.g: mesos).
+TEST_F(DockerContainerizerTest, ROOT_DOCKER_SkipRecoverNonDocker)
+{
+  slave::Flags flags = CreateSlaveFlags();
+
+  MockDocker* mockDocker = new MockDocker(tests::flags.docker);
+  Shared<Docker> docker(mockDocker);
+
+  Fetcher fetcher;
+
+  MockDockerContainerizer dockerContainerizer(flags, &fetcher, docker);
+
+  ContainerID containerId;
+  containerId.set_value("c1");
+  ContainerID reapedContainerId;
+  reapedContainerId.set_value("c2");
+
+  ExecutorID executorId;
+  executorId.set_value(UUID::random().toString());
+
+  ExecutorInfo executorInfo;
+  executorInfo.mutable_container()->set_type(ContainerInfo::MESOS);
+
+  ExecutorState executorState;
+  executorState.info = executorInfo;
+  executorState.latest = containerId;
+
+  RunState runState;
+  runState.id = containerId;
+  executorState.runs.put(containerId, runState);
+
+  FrameworkState frameworkState;
+  frameworkState.executors.put(executorId, executorState);
+
+  SlaveState slaveState;
+  FrameworkID frameworkId;
+  frameworkId.set_value(UUID::random().toString());
+  slaveState.frameworks.put(frameworkId, frameworkState);
+
+  Future<Nothing> recover = dockerContainerizer.recover(slaveState);
+  AWAIT_READY(recover);
+
+  Future<hashset<ContainerID>> containers = dockerContainerizer.containers();
+  AWAIT_READY(containers);
+
+  // A MesosContainerizer task shouldn't be recovered by
+  // DockerContainerizer.
+  EXPECT_EQ(0u, containers.get().size());
 }
 
 

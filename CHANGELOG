@@ -6,9 +6,23 @@ Release Notes - Mesos - Version 0.22.1
 ** Bug
   * [MESOS-1795] - Assertion failure in state abstraction crashes JVM.
   * [MESOS-2161] - AbstractState JNI check fails for Marathon framework.
-  * [MESOS-2494] - Clang build broken with "expression result unused" warning.
   * [MESOS-2583] - Tasks getting stuck in staging.
+  * [MESOS-2592] - The sandbox directory is not chown'ed if the
+                   fetcher doesn't run.
+  * [MESOS-2601] - Tasks are not removed after recovery from slave and mesos
+                   containerizer
+  * [MESOS-2643] - Python scheduler driver disables implicit acknowledgments by
+                   default.
+  * [MESOS-2668] - Slave fails to recover when there are still processes left in
+                   its cgroup
 
+** Improvement
+  * [MESOS-2461] - Slave should provide details on processes running in its
+                   cgroups
+
+** Task
+  * [MESOS-2614] - Update name, hostname, failover_timeout, and webui_url
+                   in master on framework re-registration
 
 Release Notes - Mesos - Version 0.22.0
 --------------------------------------

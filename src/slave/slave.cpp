@@ -238,14 +238,37 @@ void Slave::initialize()
                 << " for slave: " << processes.error();
       }
 
-      // TODO(idownes): Re-evaluate this behavior if it's observed,
-      // possibly automatically killing any running processes and
-      // moving this code to during recovery.
+      // Log if there are any processes in the slave's cgroup. They
+      // may be transient helper processes like 'perf' or 'du',
+      // ancillary processes like 'docker log' or possibly a stuck
+      // slave.
+      // TODO(idownes): Generally, it's not a problem if there are
+      // processes running in the slave's cgroup, though any resources
+      // consumed by those processes are accounted to the slave. Where
+      // applicable, transient processes should be configured to
+      // terminate if the slave exits; see example usage for perf in
+      // isolators/cgroups/perf.cpp. Consider moving ancillary
+      // processes to a different cgroup, e.g., moving 'docker log' to
+      // the container's cgroup.
       if (!processes.get().empty()) {
-        EXIT(1) << "A slave (or child process) is still running, "
-                << "please check the process(es) '"
-                << stringify(processes.get()) << "' listed in "
-                << path::join(hierarchy.get(), cgroup, "cgroups.proc");
+        // For each process, we print its pid as well as its command
+        // to help triaging.
+        vector<string> infos;
+        foreach (pid_t pid, processes.get()) {
+          Result<os::Process> proc = os::process(pid);
+
+          // Only print the command if available.
+          if (proc.isSome()) {
+            infos.push_back(stringify(pid) + " '" + proc.get().command + "'");
+          } else {
+            infos.push_back(stringify(pid));
+          }
+        }
+
+        LOG(INFO) << "A slave (or child process) is still running, please"
+                  << " consider checking the following process(es) listed in "
+                  << path::join(hierarchy.get(), cgroup, "cgroups.proc")
+                  << ":\n" << strings::join("\n", infos);
       }
 
       // Move all of our threads into the cgroup.
@@ -2948,8 +2971,15 @@ ExecutorInfo Slave::getExecutorInfo(
 
     // Command executors share the same id as the task.
     executor.mutable_executor_id()->set_value(task.task_id().value());
-
     executor.mutable_framework_id()->CopyFrom(frameworkId);
+
+    if (task.has_container() &&
+        task.container().type() != ContainerInfo::MESOS) {
+      // Store the container info in the executor info so it will
+      // be checkpointed. This allows the correct containerizer to
+      // recover this task on restart.
+      executor.mutable_container()->CopyFrom(task.container());
+    }
 
     // Prepare an executor name which includes information on the
     // command being launched.
@@ -4204,7 +4234,7 @@ Executor* Framework::launchExecutor(
     // when it has registered to the slave.
     launch = slave->containerizer->launch(
         containerId,
-        executorInfo_, // modified to include the task's resources.
+        executorInfo_, // Modified to include the task's resources, see above.
         executor->directory,
         user,
         slave->info.id(),
@@ -4222,7 +4252,7 @@ Executor* Framework::launchExecutor(
     launch = slave->containerizer->launch(
         containerId,
         taskInfo,
-        executorInfo_,
+        executorInfo_, // Modified to include the task's resources, see above.
         executor->directory,
         user,
         slave->info.id(),
