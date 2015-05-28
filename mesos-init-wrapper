@@ -1,4 +1,6 @@
 #!/bin/bash
+MESOS_SLAVE=$(which mesos-slave)
+MESOS_MASTER=$(which mesos-master)
 set -o errexit -o nounset -o pipefail
 function -h {
 cat <<USAGE
@@ -101,7 +103,7 @@ function slave {
     local formatted="$(printf ';%s' "${resources[@]}")"
     args+=( --resources="${formatted:1}" )         # NB: Leading ';' is clipped
   fi
-  logged /usr/sbin/mesos-slave "${args[@]}"
+  logged "${MESOS_SLAVE}" "${args[@]}"
 }
 
 function master {
@@ -128,7 +130,7 @@ function master {
       fi
     fi
   done
-  logged /usr/sbin/mesos-master "${args[@]}"
+  logged "${MESOS_MASTER}" "${args[@]}"
 }
 
 # Send all output to syslog and tag with PID and executable basename.
