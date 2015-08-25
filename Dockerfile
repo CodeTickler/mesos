@@ -39,3 +39,6 @@ WORKDIR /opt/build
 
 # build and cleanup in a single layer
 RUN make install && cd / && rm -rf /opt
+
+# make sure mesos-executor can find libmesos
+RUN ldconfig
